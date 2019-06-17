@@ -1082,23 +1082,32 @@ app.get('/api/forum/:slug/users', (req, res) => {
 
 GET /post/{id}/details
 */
-
+// ${data.forum_param ? ', f.posts::int AS forum_posts, f.slug AS forum_slug, f.threads::int AS forum_threads, f.slug AS forum_slug, f.title AS forum_title, f.user AS forum_user' : ''}
+// ${data.forum_param ? 'JOIN forums AS f ON p.forum=f.slug' : ''}
 async function getPostDetail(data = {}) {
     try {
         const res = await pool.query(`SELECT p.author, p.created, p.forum, p.id, p.isEdited, p.message, p.parent, p.thread 
                                       ${data.user_param ? ', u.nickname, u.fullname, u.email, u.about' : ''}
                                       ${data.thread_param ? ', t.author AS thread_author, t.created AS thread_created, t.forum AS thread_forum, t.id AS thread_id, t.message AS thread_message, t.slug AS thread_slug, t.title AS thread_title, t.votes AS thread_votes' : ''}
-                                      ${data.forum_param ? ', (SELECT posts AS forum_posts FROM forums AS p_count WHERE p_count.slug=p.forum), f.slug AS forum_slug, (SELECT threads AS forum_threads FROM forums AS threads_count WHERE threads_count.slug = p.forum), f.title AS forum_title, f.user AS forum_user' : ''}
-                                      FROM posts AS p
+                                       FROM posts AS p
                                       ${data.user_param ? ' JOIN users AS u ON p.author=u.nickname' : ''} 
                                       ${data.thread_param ? ' JOIN threads AS t ON p.thread=t.id' : ''}
-                                      ${data.forum_param ? ' JOIN forums AS f ON p.forum=f.slug' : ''} 
-                                      WHERE p.id=$1`, [data.id]);
+                                       WHERE p.id=$1`, [data.id]);
+        if (res.rowCount && data.forum_param) {
+            const forum = await pool.query(`SELECT posts::int, threads::int, slug, title, u.nickname AS "user" FROM users AS u JOIN forums AS f ON u.nickname = f."user" WHERE slug=$1`, 
+                                            [res.rows[0].forum]);
+            res.rows[0].forum_posts = forum.rows[0].posts;
+            res.rows[0].forum_threads = forum.rows[0].threads;
+            res.rows[0].forum_slug = forum.rows[0].slug;
+            res.rows[0].forum_title = forum.rows[0].title;
+            res.rows[0].forum_user = forum.rows[0].user;
+        }
+        
         return res;
     } catch(err) {
-        // console.log('---------------');
-        // console.log('ERROR IN getPostDetail');
-        // console.log(err);
+        console.log('---------------');
+        console.log('ERROR IN getPostDetail');
+        console.log(err);
     }
 
 }
@@ -1159,9 +1168,9 @@ app.get('/api/post/:id/details', (req, res) => {
 
             if (forum_param) {
                 response['forum'] = {};
-                response['forum']['posts'] = +forum_posts;
+                response['forum']['posts'] = forum_posts;
                 response['forum']['slug'] = forum_slug;
-                response['forum']['threads'] = +forum_threads;
+                response['forum']['threads'] = forum_threads;
                 response['forum']['title'] = forum_title;
                 response['forum']['user'] = forum_user;
             }
