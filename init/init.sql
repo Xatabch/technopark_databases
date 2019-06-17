@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS CITEXT;
+
 CREATE UNLOGGED TABLE users (
     nickname CITEXT PRIMARY KEY,
     about TEXT, 
@@ -9,14 +11,14 @@ CREATE UNLOGGED TABLE forums (
     slug     CITEXT        PRIMARY KEY, 
     title    VARCHAR(100) NOT NULL, 
     "user"   CITEXT        REFERENCES users(nickname) NOT NULL,
-    posts    BIGINT        NOT NULL DEFAULT 0,
-    threads  INT           NOT NULL DEFAULT 0
+    posts    BIGINT        DEFAULT 0,
+    threads  BIGINT        DEFAULT 0
 );
 
 CREATE UNLOGGED TABLE threads (
     id       SERIAL         PRIMARY KEY, 
     author   CITEXT         REFERENCES users(nickname), 
-    created  TIMESTAMP, 
+    created  TIMESTAMP WITH TIME ZONE, 
     forum    CITEXT         REFERENCES forums(slug) NOT NULL, 
     message  TEXT, 
     slug     CITEXT         UNIQUE, 
@@ -24,17 +26,17 @@ CREATE UNLOGGED TABLE threads (
     votes    INT            DEFAULT 0
 );
 
-CREATE UNLOGGED SEQUENCE IF NOT EXISTS posts_id_seq;
+CREATE SEQUENCE IF NOT EXISTS posts_id_seq START 1;
 
 CREATE UNLOGGED TABLE posts (
     id          SERIAL      PRIMARY KEY, 
     author      CITEXT      REFERENCES users(nickname), 
-    created     TIMESTAMP   DEFAULT NOW(), 
+    created     TIMESTAMP WITH TIME ZONE   DEFAULT NOW(), 
     forum       CITEXT      REFERENCES forums(slug), 
     isEdited    BOOLEAN     DEFAULT false, 
     message     TEXT, 
     parent      INT         DEFAULT NULL, 
-    thread      INT         REFERENCES threads(id),
+    thread      INT         NOT NULL REFERENCES threads(id),
     pathtopost  INT         ARRAY
 );
 
@@ -47,6 +49,32 @@ CREATE UNLOGGED TABLE votes (
 );
 
 
+CREATE UNLOGGED TABLE IF NOT EXISTS forumusers (
+	forum            CITEXT       NOT NULL,
+	nickname         CITEXT       NOT NULL
+);
+
+ALTER TABLE forumusers
+ADD CONSTRAINT unique_forum_user_pair UNIQUE (forum, nickname);
+
 CREATE INDEX IF NOT EXISTS nickname_thread_index ON votes(nickname, thread);
 
-CREATE INDEX IF NOT EXISTS thread_id_index ON posts(thread, id);
+CREATE INDEX IF NOT EXISTS thread_id_index ON posts(id, thread);
+
+CREATE INDEX IF NOT EXISTS posts_forum ON posts(forum);
+
+CREATE INDEX post_author ON posts(author);
+
+CREATE INDEX post_thread ON posts(thread);
+
+CREATE INDEX IF NOT EXISTS email_users_index ON users(email);
+
+CREATE INDEX IF NOT EXISTS user_forums_index ON forums("user");
+
+CREATE INDEX IF NOT EXISTS created_forum_index ON threads(forum, created);
+
+CREATE INDEX IF NOT EXISTS forum_index ON threads(forum);
+
+CREATE INDEX IF NOT EXISTS posts_pathtopost_thread_index ON posts(thread, pathtopost);
+
+CREATE INDEX IF NOT EXISTS posts_parent_thread_index ON posts(parent, thread);
