@@ -1,0 +1,19 @@
+{
+  "name": "db",
+  "version": "1.0.0",
+  "description": "functiona testing for SUBD course",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server",
+    "restart": "psql -h localhost -d forum -U me -W me -p 5432 -a -q -f ./init/clear.sql && psql -h localhost -d forum -U me -W me -p 5432 -a -q -f ./init/init.sql",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Ivan Morozov",
+  "license": "ISC",
+  "dependencies": {
+    "fastify": "^2.3.0",
+    "morgan": "^1.9.1",
+    "pg": "^7.10.0"
+  }
+}
