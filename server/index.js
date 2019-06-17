@@ -4,6 +4,7 @@ const Pool = require('pg').Pool;
 const app = require('fastify')({
     logger: false,
 });
+var morgan = require('morgan');
 
 
 const pool = new Pool({
@@ -14,8 +15,69 @@ const pool = new Pool({
     port: 5432,
 });
 
-/* 
+// app.use(morgan('dev'));
 
+                    /* NEW TEST SECTION */
+// ================================================================
+async function createForumUserRelations(forumUserPairs){
+    var queryString = "INSERT INTO forumusers(forum, nickname) VALUES ";
+
+    var values = '';
+    var tmp_index = 1;
+
+    var insertionData = [];
+
+    for (var [index1, data] of forumUserPairs.entries()){
+        
+        var keys = Object.keys(data);
+        values += "(";
+        for (var [index, key] of keys.entries()){
+            values +=  "$" + (tmp_index);
+            if ((index + 2) <= keys.length){
+                values += ', ';            
+            }
+            tmp_index += 1;
+            insertionData.push(data[key]);
+        }
+
+        values += ')';
+        if ((index1 + 2) <= forumUserPairs.length){
+            values += ', ';            
+        }
+    }
+
+    queryString += values + " ON CONFLICT ON CONSTRAINT unique_forum_user_pair DO NOTHING RETURNING *";
+
+    
+    await pool.query(queryString, insertionData);
+}
+
+async function updatePostsCountBySlug(data = {}) {
+    try {
+        const res = pool.query(`UPDATE forums SET posts=posts + $1 WHERE slug=$2`, [data.count, data.slug]);
+
+        return res;
+    } catch (err) {
+        // console.log('-------------');
+        // console.log('ERROR IN updatePostsCountBySlug');
+        // console.log(err);
+    }
+}
+
+async function updateThreadsCountBySlug(data = {}) {
+    try {
+        const res = pool.query(`UPDATE forums SET threads=threads + $1 WHERE slug=$2`, [data.count, data.slug]);
+
+        return res;
+    } catch (err) {
+        // console.log('-------------');
+        // console.log('ERROR IN updatePostsCountBySlug');
+        // console.log(err);
+    }
+}
+// ================================================================
+
+/* 
 ===CREATE USER===
 
 POST /user/{nickname}/create
@@ -26,9 +88,9 @@ async function createUser(data = {}) {
         const res = await pool.query('INSERT INTO users(about, email, fullname, nickname) VALUES($1, $2, $3, $4) RETURNING *', [data.about, data.email, data.fullname, data.nickname]);
         return res;
     } catch(err) {
-        console.log('---------------')
-        console.log('ERROR IN createUser');
-        console.log(err);
+        // console.log('---------------')
+        // console.log('ERROR IN createUser');
+        // console.log(err);
         const res = await pool.query('SELECT * FROM users WHERE email = $1 OR nickname = $2', [data.email, data.nickname]);
         throw res;
     }
@@ -49,9 +111,7 @@ app.post('/api/user/:nickname/create', (req, res) => {
     });
 });
 
-
 /*
-
 ===GET USER===
 
 GET /user/{nickname}/profile
@@ -62,9 +122,9 @@ async function getUserByNickname(data = {}) {
         const res = pool.query('SELECT * FROM users WHERE nickname = $1', [data.nickname]);
         return res;
     } catch(err) {
-        console.log('---------------')
-        console.log('ERROR IN getUserByNickname');
-        console.log(err);
+        // console.log('---------------')
+        // console.log('ERROR IN getUserByNickname');
+        // console.log(err);
         throw err;
     }
 }
@@ -86,9 +146,7 @@ app.get('/api/user/:nickname/profile', (req, res) => {
     })
 })
 
-
 /*
-
 ===UPDATE USER===
 
 POST /user/{nickname}/profile
@@ -107,9 +165,9 @@ async function updateUser(data = {}) {
                                     [...valuesParams.filter(Boolean), data.nickname]);
         return res;
     } catch(err) {
-        console.log('---------------')
-        console.log('ERROR IN updateUser');
-        console.log(err);
+        // console.log('---------------')
+        // console.log('ERROR IN updateUser');
+        // console.log(err);
         throw err;
     }
 }
@@ -153,6 +211,8 @@ app.post('/api/user/:nickname/profile', (req, res) => {
 
 /*
 ===GET FORUM===
+
+GET /forum/{slug}/details
 */
 
 async function getForumBySlug(data = {}) {
@@ -160,16 +220,17 @@ async function getForumBySlug(data = {}) {
         const res = await pool.query('SELECT f.slug, f.title, u.nickname AS "user" FROM users AS u JOIN forums AS f ON u.nickname = f."user" WHERE f.slug=$1', [data.slug]);
         return res;
     } catch(err) {
-        console.log('---------------')
-        console.log('ERROR IN getForumBySlug');
-        console.log(err);
+        // console.log('---------------')
+        // console.log('ERROR IN getForumBySlug');
+        // console.log(err);
         throw err;
     }
 }
 
 async function getForumDetailsBySlug(data = {}) {
     try {
-        const res = await pool.query('SELECT CAST((SELECT COUNT(*) FROM posts WHERE forum=$1) AS int) AS posts, f.slug, CAST((SELECT COUNT(*) FROM threads WHERE forum=$1) AS int) AS threads, f.title, u.nickname AS "user" FROM users AS u JOIN forums AS f ON u.nickname = f."user" WHERE f.slug=$1', [data.slug]);
+        const res = await pool.query(`SELECT CAST(posts AS int), CAST(threads AS INT), slug, title, u.nickname AS "user" FROM users AS u JOIN forums AS f ON u.nickname = f."user" WHERE slug=$1`, 
+                                      [data.slug]);
         return res;
     } catch(err) {
         console.log('---------------')
@@ -204,12 +265,14 @@ POST /forum/create
 
 async function createForum(data = {}) {
     try {
-        const res = await pool.query('INSERT INTO forums(slug, title, "user") VALUES($1, $2, $3) RETURNING slug, title, (SELECT nickname AS "user" FROM users WHERE nickname=$3)', [data.slug, data.title, data.user]);
+        const res = await pool.query(`INSERT INTO forums(slug, title, "user") VALUES($1, $2, $3) RETURNING slug, title, 
+                                      (SELECT nickname AS "user" FROM users WHERE nickname=$3)`, 
+                                      [data.slug, data.title, data.user]);
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN createForum');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN createForum');
+        // console.log(err);
         throw err;
     }
 }
@@ -245,15 +308,16 @@ app.post('/api/forum/create', (req, res) => {
 POST /forum/{slug}/create
 */
 
-// TODO Вынести получение thread в другое место
 async function getThread(data = {}) {
     try {
-        const res = await pool.query(`SELECT t.author, t.created, f.slug AS forum, t.id, t.message, t.title ${data.params} FROM threads AS t JOIN forums AS f ON t.forum = f.slug WHERE t.slug=$1`, [data.slug]);
+        const res = await pool.query(`SELECT t.author, t.created, f.slug AS forum, t.id, t.message, t.title ${data.params} 
+                                     FROM threads AS t JOIN forums AS f ON t.forum = f.slug WHERE t.slug=$1`, 
+                                     [data.slug]);
         return res;
     } catch(err) {
-        console.log('---------------')
-        console.log('ERROR IN getThread');
-        console.log(err);
+        // console.log('---------------')
+        // console.log('ERROR IN getThread');
+        // console.log(err);
         throw err;
     }
 }
@@ -262,17 +326,25 @@ async function createThread(data = {}) {
     try {
         let res;
         if (data.slug) {
-            res = await pool.query('INSERT INTO threads(author, created, forum, message, slug, title) VALUES($1, $2, $3, $4, $5, $6) RETURNING author, created, (SELECT f.slug AS forum FROM forums AS f WHERE f.slug=$3), id, message, slug, title', 
+            res = await pool.query(`INSERT INTO threads(author, created, forum, message, slug, title) VALUES($1, $2, $3, $4, $5, $6) 
+                                    RETURNING author, created, (SELECT f.slug AS forum FROM forums AS f WHERE f.slug=$3), 
+                                    id, message, slug, title`, 
                                    [data.author, data.created, data.forum, data.message, data.slug, data.title]);
         } else {
-            res = await pool.query('INSERT INTO threads(author, created, forum, message, title) VALUES($1, $2, $3, $4, $5) RETURNING author, created, (SELECT f.slug AS forum FROM forums AS f WHERE f.slug=$3), id, message, title', 
+            res = await pool.query(`INSERT INTO threads(author, created, forum, message, title) VALUES($1, $2, $3, $4, $5) 
+                                    RETURNING author, created, (SELECT f.slug AS forum FROM forums AS f WHERE f.slug=$3), 
+                                    id, message, title`, 
                                    [data.author, data.created, data.forum, data.message, data.title]);
         }
+
+        createForumUserRelations([[data.forum, data.author]]);
+        updateThreadsCountBySlug({count: res.rowCount, slug: data.forum});
+
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN createThread');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN createThread');
+        // console.log(err);
         throw err;
     }
 }
@@ -332,9 +404,9 @@ async function checkThread({slug}) {
         const res = await pool.query('SELECT * FROM threads WHERE forum=$1', [slug]);
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN checkThread');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN checkThread');
+        // console.log(err);
         throw err;
     }
 }
@@ -371,21 +443,19 @@ async function getThreads(data = {}) {
         const res = await pool.query(queryString, values);
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN getThreads');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN getThreads');
+        // console.log(err);
         throw err;
     }
 
 }
 
 app.get('/api/forum/:slug/threads', (req, res) => {
-    const urlParams = new URLSearchParams(req.raw.url.split('?')[1]);
-    const desc = urlParams.get('desc');
-    const limit = urlParams.get('limit');
-    const since = urlParams.get('since');
+    const desc = req.query.desc;
+    const limit = req.query.limit;
+    const since = req.query.since;
     const slug = req.params.slug;
-    console.log('/api/forum/:slug/threads', desc, limit, since, slug);
     
     checkThread({slug})
     .then(result => {
@@ -434,9 +504,9 @@ async function getIdForPost() {
         const res = await pool.query("SELECT nextval('posts_id_seq')");
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN getIdForPost');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN getIdForPost');
+        // console.log(err);
     }
 }
 
@@ -458,117 +528,91 @@ async function constructPathToPost(data = {}) {
     return pathtopost;
 }
 
-function createForumUserRelations(forumUserPairs){
-    var queryString = "INSERT INTO forumusers(forum, nickname) VALUES ";
-
-    var values = '';
-    var tmp_index = 1;
-
-    var insertionData = [];
-
-    for (var [index1, data] of forumUserPairs.entries()){
-        
-        var keys = Object.keys(data);
-        values += "(";
-        for (var [index, key] of keys.entries()){
-            values +=  "$" + (tmp_index);
-            if ((index + 2) <= keys.length){
-                values += ', ';            
-            }
-            tmp_index += 1;
-            insertionData.push(data[key]);
-        }
-
-        values += ')';
-        if ((index1 + 2) <= forumUserPairs.length){
-            values += ', ';            
-        }
-    }
-
-    queryString += values + " ON CONFLICT(nickname) DO NOTHING RETURNING *";
-
-    
-    return pool.query(queryString, insertionData);
-}
-
 async function createThreads(data = {}) {
-    const textOptionalParams = ['author', 'message', 'parent'];
     const slug_or_id = data.slug_or_id;
-
-    const checkThread = await pool.query(`SELECT id FROM threads WHERE ${+slug_or_id ? 'id=' : 'slug='}$1`, [slug_or_id]);
-    if (!checkThread.rowCount) {
-        return {
-            error: 'not found',
-        }
-    }
-
     const posts = data.posts;
     const created = new Date();
 
-    const textQueryParams = textOptionalParams;
-    const numQueryParams = textQueryParams.length + 5;
-
-    const textValues = [];
-    const valueValues = [];
-
-    for (let i = 0; i < posts.length; i++) {
-        let index = i;
-        const iteration = index * numQueryParams;
-        let value = posts[i];
-
-        let { author, message, parent=null } = value;
-
-        const checkParent = await pool.query(`SELECT id FROM posts WHERE id=$1 AND thread=${+slug_or_id ? '$2' : '(SELECT id FROM threads WHERE slug=$2)'}`, [parent, slug_or_id]);
-
-        if(parent && !checkParent.rowCount) {
+    if (posts[0].parent) {
+        const checkParent = await pool.query(`SELECT id FROM posts WHERE id=$1 AND thread=${+slug_or_id ? '$2' : '(SELECT id FROM threads WHERE slug=$2)'}`, 
+                                             [posts[0].parent, slug_or_id]);
+        if(posts[0].parent && !checkParent.rowCount) {
             return {
                 error: 'conflict',
                 data: checkParent.rows[0],
             }
         }
+    }
+
+    const valueValues = [];
+    let test = '';
+    let j = 0;
+
+    for (let i = 0; i < posts.length; i++) {
+        let value = posts[i];
+
+        let { author, message, parent=null } = value;
 
         // optional parametrs
-        let params = [author, message, parent].map((_,i) => `$${i+1+iteration}`);
         let paramsValue = [author, message, parent]
+        test += `($${j+1},$${j+2},$${j+3}`;
+        j += 3;
 
         //created
-        params.push(`$${params.length+1+iteration}`); 
         paramsValue.push(created);
+        j++;
+        test += `,$${j}`;
 
         // forum, thread
         if (+slug_or_id) {
-            params.push(`(SELECT forum FROM threads WHERE id=$${params.length+1+iteration})`);
-            params.push(`$${params.length+1+iteration}`);
+            j++;
+            test += `,(SELECT forum FROM threads WHERE id=$${j})`;
+            j++;
+            test += `,$${j}`;
         } else {
-            params.push(`(SELECT forum FROM threads WHERE slug=$${params.length+1+iteration})`);
-            params.push(`(SELECT id FROM threads WHERE slug=$${params.length+1+iteration})`);
+            j++;
+            test += `,(SELECT forum FROM threads WHERE slug=$${j})`;
+            j++;
+            test += `,(SELECT id FROM threads WHERE slug=$${j})`;
         }
         paramsValue.push(slug_or_id, slug_or_id);
 
         //id
         const id = await getIdForPost();
-        params.push(`$${params.length+1+iteration}`);
         paramsValue.push(parseInt(id.rows[0].nextval, 10));
+
+        j++;
+        test += `,$${j}`;
 
         // pathtopost
         const path = await constructPathToPost({id: parseInt(id.rows[0].nextval, 10), parent});
-        params.push(`$${params.length+1+iteration}`);
         paramsValue.push(path);
 
-        textValues.push(params);
+        j++;
+        test += `,$${j}),`;
+
         valueValues.push(...paramsValue);
     }
 
-    let textQueryParamsJoin = textQueryParams.join(',');
-
+    test = test.substring(0, test.length - 1);
     try {
-        const res = await pool.query(`INSERT INTO posts(${textQueryParamsJoin},created,forum,thread,id,pathtopost) VALUES${textValues.map(param => `(${param.join(',')})`).join(',')} RETURNING ${textQueryParamsJoin}, id, created, forum, thread`,
-                                    valueValues);
+        const res = await pool.query(`INSERT INTO posts(author,message,parent,created,forum,thread,id,pathtopost) VALUES
+                                     ${test} 
+                                     RETURNING author, message, parent, id, created, forum, thread`, valueValues);
+
+        let forumUserPairs = [];
+        for(let k = 0; k < res.rows.length; k++) {
+            forumUserPairs.push([res.rows[k].forum, res.rows[k].author]);
+        }
+
+        createForumUserRelations(forumUserPairs);
+        updatePostsCountBySlug({count: res.rowCount, slug: res.rows[0].forum});
+        
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN createThreads');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN createPosts');
+        // console.log(err);
         throw err;
     }
 }
@@ -578,9 +622,9 @@ async function checkThreadForCreate(data = {}) {
         const res = await pool.query(`SELECT id FROM threads WHERE ${+data.slug_or_id ? 'id=' : 'slug='}$1`, [data.slug_or_id]);
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN checkThreadForCreate');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN checkThreadForCreate');
+        // console.log(err);
     }
 }
 
@@ -634,31 +678,30 @@ POST /thread/{slug_or_id}/vote
 
 async function insertVote(data = {}) {
     try {
-        // выбрать все из голосов где имя такое-то и ветка такая-то(если пришел не id то выбрать из слага айдишник)
         const isVoted = await pool.query(`SELECT * FROM votes WHERE nickname=$1 AND thread=${+data.slug_or_id ? '$2' : '(SELECT id FROM threads WHERE slug=$2)'}`, [data.nickname, data.slug_or_id]);
-        if (isVoted.rowCount) { // если данный пользователь уже голосовал за данную ветку, то выбрать его голоса
+        if (isVoted.rowCount) {
             const vote = isVoted.rows[0].voice;
             await pool.query(`UPDATE votes SET voice=$1 WHERE nickname=$2 AND thread=${+data.slug_or_id ? '$3' : '(SELECT id FROM threads WHERE slug=$3)'}`, [data.voice, data.nickname, data.slug_or_id]);
             const updateThread = await pool.query(`UPDATE threads SET votes=votes+$1 WHERE ${+data.slug_or_id ? 'id' : 'slug'}=$2 RETURNING *`, 
                                           [data.voice - vote, data.slug_or_id]);
             return updateThread;
-        } else { // если данный пользователь еще не голосовал за данную ветку, то вставить в vote и апдейтнуть треды
+        } else {
             await pool.query(`INSERT INTO votes(nickname, voice, thread) VALUES($1, $2, ${+data.slug_or_id ? '$3' : '(SELECT id FROM threads WHERE slug=$3)'})`, [data.nickname, data.voice, data.slug_or_id]);
             const res = await pool.query(`UPDATE threads SET votes=votes+$1 WHERE ${+data.slug_or_id ? 'id' : 'slug'}=$2 RETURNING *`, [data.voice, data.slug_or_id]);
             return res;
         }
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN insertVote');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN insertVote');
+        // console.log(err);
         throw err;  
     }
 }
 
 app.post('/api/thread/:slug_or_id/vote', (req, res) => {
-    const slug_or_id = req.params.slug_or_id; // id ветки обсуждения
-    const nickname = req.body.nickname; // имя пользователя
-    const voice = req.body.voice; // голос пользователя
+    const slug_or_id = req.params.slug_or_id;
+    const nickname = req.body.nickname;
+    const voice = req.body.voice;
 
     insertVote({slug_or_id, nickname, voice})
     .then(result => {
@@ -674,29 +717,25 @@ app.post('/api/thread/:slug_or_id/vote', (req, res) => {
 })
 
 /*
-
 ===GET THREAD===
 
 GET /thread/{slug_or_id}/details
-
 */
 
 async function getThreadDetails(data = {}) {
     try {
         const res = await pool.query(`SELECT * FROM threads WHERE ${+data.slug_or_id ? 'id' : 'slug'}=$1`, [data.slug_or_id]);
-        console.log(res);
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN getThreadDetails');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN getThreadDetails');
+        // console.log(err);
         throw err;
     }
 } 
 
 app.get('/api/thread/:slug_or_id/details', (req, res) => {
     const slug_or_id = req.params.slug_or_id;
-    console.log('/api/thread/:slug_or_id/details', slug_or_id);
     getThreadDetails({slug_or_id})
     .then(result => {
         if (!result.rowCount) {
@@ -714,11 +753,9 @@ app.get('/api/thread/:slug_or_id/details', (req, res) => {
 })
 
 /*
-
 ===GET POSTS===
 
 GET /thread/{slug_or_id}/posts
-
 */
 
 async function flatSort(data = {}) {
@@ -751,9 +788,9 @@ async function flatSort(data = {}) {
             }
         }
     } catch (err) {
-        console.log('---------------');
-        console.log('ERROR IN flatSort');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN flatSort');
+        // console.log(err);
         throw err;
     }
 }
@@ -788,13 +825,13 @@ async function treeSort(data = {}) {
             return res;  
         }
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN treeSort');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN treeSort');
+        // console.log(err);
     }
 }
 
-async function parentTreeSort (data = {}) {
+async function parentTreeSort(data = {}) {
     try {
         const isThread = await pool.query(`SELECT id FROM threads WHERE id=${+data.slug_or_id ? '$1' : '(SELECT id FROM threads WHERE slug=$1)'}`, [data.slug_or_id]);
         if (!isThread.rowCount) {
@@ -860,18 +897,17 @@ async function parentTreeSort (data = {}) {
             return res;
         }
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN parentSort');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN parentSort');
+        // console.log(err);
     }
 }
 
 app.get('/api/thread/:slug_or_id/posts', (req, res) => {
-    let urlParams = new URLSearchParams(req.raw.url.split('?')[1]);
-    let desc = urlParams.get('desc');
-    let limit = urlParams.get('limit');
-    let since = urlParams.get('since');
-    let sort = urlParams.get('sort');
+    let desc = req.query.desc;
+    let limit = req.query.limit;
+    let since = req.query.since;
+    let sort = req.query.sort;
     let slug_or_id = req.params.slug_or_id;
 
     if (!limit) {
@@ -922,7 +958,6 @@ app.get('/api/thread/:slug_or_id/posts', (req, res) => {
 })
 
 /*
-
 ===UPDATE THREAD===
 
 POST /thread/{slug_or_id}/details
@@ -945,9 +980,9 @@ async function updateThread(data = {}) {
                                     [...valuesParams.filter(Boolean), data.slug_or_id]);
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN updateThread');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN updateThread');
+        // console.log(err);
         throw err;
     }
 }
@@ -972,58 +1007,55 @@ app.post('/api/thread/:slug_or_id/details', (req, res) => {
     })
 });
 
+/*
+===GET FORUM USERS===
+
+GET /api/forum/:slug/users
+*/
+
 async function checkForum(data = {}) {
     try {
         const res = await pool.query('SELECT * FROM forums WHERE slug=$1', [data.slug]);
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN checkForum');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN checkForum');
+        // console.log(err);
         throw err;
     }
 }
 
 async function getForumUsers(data = {}) {
     try {
+        let res;
         if (data.since) {
-            const res = pool.query(`SELECT DISTINCT u.nickname, u.email, u.fullname, u.about FROM threads AS t LEFT JOIN posts AS p 
-                                    ON t.id = p.thread JOIN users AS u ON t.author = u.nickname OR p.author = u.nickname WHERE
-                                    t.forum = $1 
-                                    ${data.desc ? 'AND u.nickname < $2' : 'AND u.nickname > $2'} 
-                                    ${data.desc ? 'ORDER BY nickname DESC' : 'ORDER BY nickname ASC'}
-                                    LIMIT $3`,
+            res = await pool.query(`SELECT * FROM users AS U RIGHT OUTER JOIN forumusers AS FU
+                                    ON FU.nickname = U.nickname
+                                    WHERE FU.forum=$1 AND ${data.desc ? 'U.nickname < $2' : 'U.nickname > $2'} 
+                                    ORDER BY ${data.desc ? 'FU.nickname DESC' : 'FU.nickname ASC'} LIMIT $3`,
                                     [data.slug, data.since, data.limit]);
-            return res;
         } else {
-            // const res = pool.query(`SELECT nickname, email, fullname, about FROM users WHERE nickname IN 
-            //                         (SELECT author FROM threads WHERE forum=$1) OR nickname IN
-            //                         (SELECT author FROM posts WHERE forum=$1) 
-            //                         ${data.desc ? 'ORDER BY nickname DESC' : 'ORDER BY nickname ASC'}
-            //                         LIMIT $2`, [data.slug, data.limit]);
-            const res = pool.query(`SELECT DISTINCT u.nickname, u.email, u.fullname, u.about FROM threads AS t LEFT JOIN posts AS p 
-                                    ON t.id = p.thread JOIN users AS u ON t.author = u.nickname OR p.author = u.nickname WHERE
-                                    t.forum = $1 
-                                    ${data.desc ? 'ORDER BY nickname DESC' : 'ORDER BY nickname ASC'}
-                                    LIMIT $2`,
-                                    [data.slug, data.limit]);
-            return res;
+            res = pool.query(`SELECT * FROM users AS U RIGHT OUTER JOIN forumusers AS FU
+                              ON FU.nickname = U.nickname
+                              WHERE FU.forum=$1 ORDER BY ${data.desc ? 'FU.nickname DESC' : 'FU.nickname ASC'} LIMIT $2`, 
+                              [data.slug, data.limit]);
         }
+
+        return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN getUsers');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN getUsers');
+        // console.log(err);
         throw err;
     }
 }
 
 app.get('/api/forum/:slug/users', (req, res) => {
-    const urlParams = new URLSearchParams(req.raw.url.split('?')[1]);
-    let desc = urlParams.get('desc');
-    let limit = urlParams.get('limit');
-    let since = urlParams.get('since');
+    let desc = req.query.desc;
+    let limit = req.query.limit;
+    let since = req.query.since;
     const slug = req.params.slug;
-    // console.log('FORUM USERS /api/forum/:slug/users', desc, limit, since, slug);
+
     desc = desc === 'true';
     limit = limit ? limit : 10;
     since = since ? since : null;
@@ -1055,8 +1087,8 @@ async function getPostDetail(data = {}) {
     try {
         const res = await pool.query(`SELECT p.author, p.created, p.forum, p.id, p.isEdited, p.message, p.parent, p.thread 
                                       ${data.user_param ? ', u.nickname, u.fullname, u.email, u.about' : ''}
-                                      ${data.thread_param ? ', t.author AS thread_author, t.created AS thread_created, t.forum AS thread_forum, t.id AS thread_id, t.message AS thread_message, t.slug AS thread_slug, t.title AS thread_title' : ''}
-                                      ${data.forum_param ? ', (SELECT COUNT(*) AS forum_posts FROM posts AS p_count WHERE p_count.forum=p.forum), f.slug AS forum_slug, (SELECT COUNT(*) AS forum_threads FROM threads AS threads_count WHERE threads_count.forum = p.forum), f.title AS forum_title, f.user AS forum_user' : ''}
+                                      ${data.thread_param ? ', t.author AS thread_author, t.created AS thread_created, t.forum AS thread_forum, t.id AS thread_id, t.message AS thread_message, t.slug AS thread_slug, t.title AS thread_title, t.votes AS thread_votes' : ''}
+                                      ${data.forum_param ? ', (SELECT posts AS forum_posts FROM forums AS p_count WHERE p_count.slug=p.forum), f.slug AS forum_slug, (SELECT threads AS forum_threads FROM forums AS threads_count WHERE threads_count.slug = p.forum), f.title AS forum_title, f.user AS forum_user' : ''}
                                       FROM posts AS p
                                       ${data.user_param ? ' JOIN users AS u ON p.author=u.nickname' : ''} 
                                       ${data.thread_param ? ' JOIN threads AS t ON p.thread=t.id' : ''}
@@ -1064,19 +1096,18 @@ async function getPostDetail(data = {}) {
                                       WHERE p.id=$1`, [data.id]);
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN getPostDetail');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN getPostDetail');
+        // console.log(err);
     }
 
 }
 
 app.get('/api/post/:id/details', (req, res) => {
-    const urlParams = new URLSearchParams(req.raw.url.split('?')[1]);
     let user_param = null;
     let thread_param = null;
     let forum_param = null;
-    let related = urlParams.get('related');
+    let related = req.query.related;
     if (related) {
         let params = related.split(',');
         user_param = params[params.indexOf('user')];
@@ -1088,10 +1119,10 @@ app.get('/api/post/:id/details', (req, res) => {
     getPostDetail({id, user_param, thread_param, forum_param})
     .then(result => {
         if (result.rowCount) { 
-            let { author, created, forum, id, isedited, message, thread,
+            let { author, created, forum, id, isedited, message, parent, thread,
                 nickname, fullname, email, about, thread_author, 
                 thread_created, thread_forum, thread_id, 
-                thread_message, thread_slug, thread_title,
+                thread_message, thread_slug, thread_title, thread_votes,
                 forum_posts, forum_slug, forum_threads, forum_title, forum_user } = result.rows[0];
 
             let response = {
@@ -1102,6 +1133,7 @@ app.get('/api/post/:id/details', (req, res) => {
                     'id': id,
                     'isEdited': isedited,
                     'message': message,
+                    'parent' : parent,
                     'thread': thread,
             }}
 
@@ -1122,6 +1154,7 @@ app.get('/api/post/:id/details', (req, res) => {
                 response['thread']['message'] = thread_message;
                 response['thread']['slug'] = thread_slug;
                 response['thread']['title'] = thread_title;
+                response['thread']['votes'] = thread_votes;
             }
 
             if (forum_param) {
@@ -1140,10 +1173,10 @@ app.get('/api/post/:id/details', (req, res) => {
               })
         }
     })
-    .catch(error => {
-        console.log('---------------');
-        console.log('ERROR IN getPostDetails')
-        console.log(error);
+    .catch(() => {
+        // console.log('---------------');
+        // console.log('ERROR IN getPostDetails')
+        // console.log(error);
     })
 });
 
@@ -1173,9 +1206,9 @@ async function updatePostMessage(data = {}) {
 
         return res;
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN updatePostMessage');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN updatePostMessage');
+        // console.log(err);
     }
 } 
 
@@ -1207,10 +1240,10 @@ app.post('/api/post/:id/details', (req, res) => {
             });
         }
     })
-    .catch(err => {
-        console.log('---------------');
-        console.log('ERROR IN updatePostMessage');
-        console.log(err);
+    .catch(() => {
+        // console.log('---------------');
+        // console.log('ERROR IN updatePostMessage');
+        // console.log(err);
     })
 })
 
@@ -1234,9 +1267,9 @@ async function getServiceStatus() {
             users: users.rows[0].count,
         };
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN getServiceStatus');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN getServiceStatus');
+        // console.log(err);
     }
 }
 
@@ -1268,9 +1301,9 @@ async function clearService() {
 
         return {};
     } catch(err) {
-        console.log('---------------');
-        console.log('ERROR IN clearService');
-        console.log(err);
+        // console.log('---------------');
+        // console.log('ERROR IN clearService');
+        // console.log(err);
     }
 }
 
@@ -1293,6 +1326,6 @@ app.post('/api/service/clear', (req, res) => {
 
 const port = process.env.PORT || 5000;
 
-app.listen(port, () => {
-    console.log(`Server listening port ${port}`);
+app.listen(port, '0.0.0.0',(err,address) => {
+	console.log(`Server listening on port ${port}`);
 });
